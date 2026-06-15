@@ -11,7 +11,8 @@ import RealizedProfit from '../components/dashboard/RealizedProfit'
 import AdvancedAnalytics from '../components/dashboard/AdvancedAnalytics'
 import InvestmentJourney from '../components/dashboard/InvestmentJourney'
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
+const BACKEND_URL =
+  import.meta.env.VITE_BACKEND_URL ?? (import.meta.env.DEV ? 'http://localhost:5174' : '')
 
 export default function PortfolioDashboard() {
   const { holdings, orders, loading, error, needsLogin } = usePortfolio()
@@ -36,7 +37,7 @@ export default function PortfolioDashboard() {
         title="Session expired"
         message="Your Paytm token isn't active. Log in again to load your portfolio."
         action={
-          <a href={`${BACKEND_URL}/login`} className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
+          <a href={`${BACKEND_URL}/api/login`} className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
             Login with Paytm
           </a>
         }

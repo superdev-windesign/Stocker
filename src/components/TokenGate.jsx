@@ -1,15 +1,39 @@
 import { useState } from 'react'
 
 const ENV_TOKEN = import.meta.env.VITE_PAYTM_PUBLIC_ACCESS_TOKEN || ''
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
+const BACKEND_URL =
+  import.meta.env.VITE_BACKEND_URL ?? (import.meta.env.DEV ? 'http://localhost:5174' : '')
 
 export default function TokenGate({ onConnect, error }) {
   const [token, setToken] = useState(ENV_TOKEN)
+  const [retrievedToken, setRetrievedToken] = useState(null)
+  const [retrieveLoading, setRetrieveLoading] = useState(false)
+  const [retrieveError, setRetrieveError] = useState(null)
 
   const submit = (e) => {
     e.preventDefault()
     const t = token.trim()
     if (t) onConnect(t)
+  }
+
+  const fetchStoredToken = async () => {
+    setRetrieveLoading(true)
+    setRetrieveError(null)
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/token/retrieve`)
+      const data = await res.json()
+      if (!res.ok) {
+        setRetrieveError(data.error || 'Failed to retrieve token')
+        setRetrievedToken(null)
+      } else {
+        setRetrievedToken(data)
+        setToken(data.public_access_token)
+      }
+    } catch (err) {
+      setRetrieveError(err.message)
+    } finally {
+      setRetrieveLoading(false)
+    }
   }
 
   return (
@@ -22,21 +46,50 @@ export default function TokenGate({ onConnect, error }) {
         <p className="mt-1 text-sm text-gray-400">Live Nifty 50 market data via Paytm Money</p>
 
         {error && (
-          <div className="mt-4 rounded-lg border border-down/40 bg-down/10 px-3 py-2 text-sm text-down">
+          <div className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-400">
             {error}
           </div>
         )}
 
-        {/* Recommended path: one-click login that generates the token server-side. */}
-        <a
-          href={`${BACKEND_URL}/login`}
-          className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 py-2.5 font-semibold text-white transition hover:bg-indigo-500"
+        {/* Option 1: retrieve token from database (no new login needed). */}
+        <button
+          type="button"
+          onClick={fetchStoredToken}
+          disabled={retrieveLoading}
+          className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 py-2.5 font-semibold text-white transition hover:bg-green-500 disabled:opacity-50"
         >
-          🔑 Login with Paytm &amp; generate token
+          {retrieveLoading ? '⏳ Retrieving…' : '📦 Copy stored token from DB'}
+        </button>
+        <p className="mt-2 text-xs text-gray-500">
+          Retrieves your previously-generated token from Turso (no re-login needed).
+        </p>
+
+        {retrieveError && (
+          <div className="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+            {retrieveError}
+          </div>
+        )}
+
+        {retrievedToken && (
+          <div className="mt-3 rounded-lg border border-green-500/40 bg-green-500/10 px-3 py-2 text-xs text-green-400">
+            ✓ Token loaded (valid until {new Date(retrievedToken.expires_at).toLocaleString()})<br />
+            Expires in ~{retrievedToken.expires_in_hours} hours
+          </div>
+        )}
+
+        <div className="my-6 flex items-center gap-3 text-xs text-gray-600">
+          <span className="h-px flex-1 bg-white/10" /> or <span className="h-px flex-1 bg-white/10" />
+        </div>
+
+        {/* Option 2: new login (generates fresh token). */}
+        <a
+          href={`${BACKEND_URL}/api/login`}
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 py-2.5 font-semibold text-white transition hover:bg-indigo-500"
+        >
+          🔑 Login with Paytm &amp; generate new token
         </a>
         <p className="mt-2 text-xs text-gray-500">
-          Opens the Paytm login. After you sign in, the token helper exchanges your request token and
-          brings you back here connected. Requires the backend running (<code>npm run server</code>).
+          Opens Paytm login. After sign-in, the token helper exchanges your request token and stores it in Turso.
         </p>
 
         <div className="my-6 flex items-center gap-3 text-xs text-gray-600">

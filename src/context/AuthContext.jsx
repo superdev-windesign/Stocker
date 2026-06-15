@@ -1,6 +1,9 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
+// In production (Vercel) the API lives at the same origin under /api/*, so the base
+// URL is empty. Locally it's the Express dev server. An explicit VITE_BACKEND_URL wins.
+const BACKEND_URL =
+  import.meta.env.VITE_BACKEND_URL ?? (import.meta.env.DEV ? 'http://localhost:5174' : '')
 
 const AuthContext = createContext(null)
 
@@ -17,19 +20,48 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
+    const cleanUrl = () => window.history.replaceState({}, '', window.location.pathname)
+
     if (params.get('error')) {
       setAuthError(decodeURIComponent(params.get('error')))
-      window.history.replaceState({}, '', window.location.pathname)
+      cleanUrl()
     }
-    // Always probe the backend so a page refresh stays logged in.
-    fetch(`${BACKEND_URL}/api/token`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => d?.public_access_token && setToken(d.public_access_token))
-      .catch(() => {})
-      .finally(() => {
-        setChecking(false)
-        if (params.get('connected')) window.history.replaceState({}, '', window.location.pathname)
-      })
+
+    // Paytm's Return URL redirects to the app root with ?requestToken=... — hand it to
+    // the backend, which exchanges it for the token set and stores it in Turso.
+    const requestToken = params.get('requestToken') || params.get('request_token')
+
+    const init = async () => {
+      if (requestToken) {
+        try {
+          const r = await fetch(`${BACKEND_URL}/api/exchange`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ request_token: requestToken }),
+          })
+          const d = await r.json().catch(() => ({}))
+          if (r.ok && d.public_access_token) setToken(d.public_access_token)
+          else setAuthError(d.error || 'Token exchange failed')
+        } catch (e) {
+          setAuthError(e.message)
+        } finally {
+          cleanUrl()
+        }
+        return
+      }
+
+      // No request token: probe the backend so a page refresh stays logged in.
+      try {
+        const r = await fetch(`${BACKEND_URL}/api/token`)
+        const d = r.ok ? await r.json() : null
+        if (d?.public_access_token) setToken(d.public_access_token)
+      } catch {
+        /* not logged in yet */
+      }
+      if (params.get('connected')) cleanUrl()
+    }
+
+    init().finally(() => setChecking(false))
   }, [])
 
   const logout = () => {

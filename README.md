@@ -38,26 +38,35 @@ It subscribes with a JSON preference array (`actionType: ADD`, `modeType: LTP`, 
 ## Token generation (the login flow)
 
 Paytm's token exchange (`request_token` → `access_token`) **cannot** run in the browser: the
-`gettoken` endpoint blocks cross-origin calls, and your `api_secret` must stay server-side. So a tiny
-helper backend (`server/index.js`, port **3000**) holds the secret and does the exchange.
+`gettoken` endpoint blocks cross-origin calls, and your `api_secret` must stay server-side. So a
+backend holds the secret and does the exchange. **The same backend logic runs two ways**, sharing
+one code path (`api/_lib/paytm.js`) and one Turso DB:
+
+- **Locally** as an Express server (`server/index.js`, port **5174**).
+- **In production** as Vercel serverless functions (`api/*.js`), same-origin under `/api/*`.
+
+Paytm's **Return URL points at the app root**, so after login Paytm redirects to
+`<app>/?requestToken=...`. The React app picks that up and POSTs it to `/api/exchange`:
 
 ```
-[browser]  /login ─▶ Paytm login page ─▶ (Return URL) localhost:3000/?requestToken=...
+[browser]  /api/login ─▶ Paytm login page ─▶ (Return URL) <app>/?requestToken=...
                                                 │
-                                  backend exchanges request_token + api_key + api_secret
+[React]    POST /api/exchange { request_token } ─▶ backend exchanges with api_key + api_secret
                                                 │
-                       ◀─ redirect to React app (:5173) ─ caches public_access_token
-[React]    GET /api/token ─▶ auto-connects the websocket
+                                  stores token set in Turso, returns public_access_token
+[React]    auto-connects the websocket; GET /api/token re-reads it on refresh
 ```
 
-**One-time Paytm Developer Portal setup:** set your app's **Return URL** to `http://localhost:3000`.
+**One-time Paytm Developer Portal setup:** set your app's **Return URL** to your deployed root
+(e.g. `https://stocker-beige.vercel.app/`). For local-only flows you can instead point it at
+`http://localhost:5174`.
 
 ## Setup
 
 ```bash
 npm install
 cp .env.example .env       # then fill in PAYTM_API_KEY and PAYTM_API_SECRET
-npm start                  # runs the backend (:3000) AND the React app (:5173) together
+npm start                  # runs the backend (:5174) AND the React app (:5173) together
 ```
 
 Open http://localhost:5173, click **🔑 Login with Paytm & generate token**, sign in, and you'll land
@@ -65,14 +74,29 @@ back in the app already connected. (Already have a token? Paste it manually inst
 only during NSE market hours; outside them the app connects but shows no price movement.
 
 ### Session persistence
-After you log in, the backend saves the session to `server/.tokens.json` (gitignored) and reloads it on
-startup, so **restarting the server doesn't force a re-login**. Paytm tokens expire at midnight IST — once
-expired, the saved session is auto-discarded and you log in again. `Logout` clears the saved session.
+After you log in, the backend stores the session in **Turso** (libSQL), so restarts — and the
+stateless serverless functions — never force a re-login. Because local dev and the deployed site
+share the same Turso DB, a login on either is instantly usable on the other (the TokenGate's
+**"Copy stored token from DB"** button pulls it via `/api/token/retrieve`). Paytm tokens expire at
+midnight IST — once expired, the saved session is auto-discarded and you log in again. `Logout`
+clears the stored session.
+
+## Deploy to Vercel
+
+The frontend (Vite → `dist/`) and the backend (`api/*.js` serverless functions) deploy together as
+one Vercel project. `vercel.json` rewrites all non-`/api/` paths to `index.html` for the SPA router.
+
+1. Import the repo in Vercel (framework preset: **Vite**).
+2. Set **Environment Variables**: `PAYTM_API_KEY`, `PAYTM_API_SECRET`, `TURSO_URL`,
+   `TURSO_AUTH_TOKEN`. **Do not set `VITE_BACKEND_URL`** — leaving it unset makes the frontend call
+   the same-origin `/api/*`.
+3. In the Paytm Developer Portal set the **Return URL** to your deployed root (e.g.
+   `https://stocker-beige.vercel.app/`).
 
 ## Scripts
 
 - `npm start` — run backend + frontend together (use this)
-- `npm run server` — token-helper backend only (port 3000)
+- `npm run server` — token-helper backend only (port 5174)
 - `npm run dev` — Vite frontend only (port 5173)
 - `npm run build` — production build into `dist/`
 - `npm run preview` — preview the production build
@@ -80,6 +104,11 @@ expired, the saved session is auto-discarded and you log in again. `Logout` clea
 ## Project layout
 
 ```
+api/
+  _lib/paytm.js             # shared Turso + Paytm logic (used by api/* AND server/)
+  _lib/handler.js           # proxy() wrapper for the REST endpoints
+  login.js exchange.js …    # Vercel serverless functions (production /api/*)
+server/index.js             # local Express dev server (imports api/_lib/paytm.js)
 src/
   config/stocks.js          # the 5 scrips + subscription preferences + id lookup
   services/parseBinary.js   # browser decoder for Paytm binary tick packets

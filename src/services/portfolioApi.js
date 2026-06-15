@@ -1,5 +1,7 @@
 // Thin fetch wrappers around the backend /api/* proxy endpoints.
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
+// Same-origin in production (Vercel), local Express in dev; VITE_BACKEND_URL wins.
+const BACKEND_URL =
+  import.meta.env.VITE_BACKEND_URL ?? (import.meta.env.DEV ? 'http://localhost:5174' : '')
 
 async function get(path, params) {
   const qs = params ? `?${new URLSearchParams(params)}` : ''
