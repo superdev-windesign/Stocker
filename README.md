@@ -106,8 +106,9 @@ one Vercel project. `vercel.json` rewrites all non-`/api/` paths to `index.html`
 ```
 api/
   _lib/paytm.js             # shared Turso + Paytm logic (used by api/* AND server/)
-  _lib/handler.js           # proxy() wrapper for the REST endpoints
-  login.js exchange.js …    # Vercel serverless functions (production /api/*)
+  login/exchange/token/…    # auth+session serverless functions (production /api/*)
+  [resource].js             # one dynamic proxy for all Paytm REST data endpoints
+                            # (keeps us under Vercel Hobby's 12-function limit)
 server/index.js             # local Express dev server (imports api/_lib/paytm.js)
 src/
   config/stocks.js          # the 5 scrips + subscription preferences + id lookup
