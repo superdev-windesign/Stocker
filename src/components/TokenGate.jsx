@@ -4,7 +4,7 @@ const ENV_TOKEN = import.meta.env.VITE_PAYTM_PUBLIC_ACCESS_TOKEN || ''
 const BACKEND_URL =
   import.meta.env.VITE_BACKEND_URL ?? (import.meta.env.DEV ? 'http://localhost:5174' : '')
 
-export default function TokenGate({ onConnect, error }) {
+export default function TokenGate({ onConnect, onDemo, error }) {
   const [token, setToken] = useState(ENV_TOKEN)
   const [retrievedToken, setRetrievedToken] = useState(null)
   const [retrieveLoading, setRetrieveLoading] = useState(false)
@@ -119,6 +119,24 @@ export default function TokenGate({ onConnect, error }) {
         >
           Connect with pasted token
         </button>
+
+        {onDemo && (
+          <>
+            <div className="my-6 flex items-center gap-3 text-xs text-gray-600">
+              <span className="h-px flex-1 bg-white/10" /> just looking? <span className="h-px flex-1 bg-white/10" />
+            </div>
+            <button
+              type="button"
+              onClick={onDemo}
+              className="w-full rounded-lg border border-amber-400/40 bg-amber-400/10 py-2.5 font-semibold text-amber-400 transition hover:border-amber-400/70"
+            >
+              🎭 Explore with demo data
+            </button>
+            <p className="mt-2 text-xs text-gray-500">
+              Loads a sample portfolio so you can try the dashboard — no Paytm login required.
+            </p>
+          </>
+        )}
       </form>
     </div>
   )

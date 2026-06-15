@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { fetchHoldings, fetchOrders, fetchFunds } from '../services/portfolioApi'
 import { normalizeHoldings } from '../analytics/normalize'
+import { DEMO_HOLDINGS, DEMO_ORDERS } from '../data/demoPortfolio'
+import { useAuth } from './AuthContext'
 
 const PortfolioContext = createContext(null)
 
@@ -16,11 +18,23 @@ export function PortfolioProvider({ children }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [needsLogin, setNeedsLogin] = useState(false)
+  const { demo } = useAuth()
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     setNeedsLogin(false)
+
+    // Demo mode: serve dummy data through the same normalize pipeline, no fetch.
+    if (demo) {
+      setHoldings(normalizeHoldings(DEMO_HOLDINGS))
+      setOrders(DEMO_ORDERS)
+      setFunds(null)
+      setHoldingsValue(null)
+      setLoading(false)
+      return
+    }
+
     try {
       const [h, o, f] = await Promise.allSettled([fetchHoldings(), fetchOrders(), fetchFunds()])
 
@@ -40,7 +54,7 @@ export function PortfolioProvider({ children }) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [demo])
 
   useEffect(() => {
     load()
