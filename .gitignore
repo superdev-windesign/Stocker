@@ -7,3 +7,5 @@ dist
 # Persisted Paytm session (contains real tokens — never commit)
 .tokens.json
 server/.tokens.json
+.vercel
+.env*.local
